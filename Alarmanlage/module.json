@@ -1,0 +1,12 @@
+{
+    "id": "{228E06F3-4970-425D-ACB3-41D24F1B4541}",
+    "name": "Alarmanlage",
+    "type": 3,
+    "vendor": "Christian Hagedorn",
+    "aliases": ["Alarmzentrale"],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "ALM",
+    "url": "https://github.com/Hagi0815/Alarmanlage"
+}

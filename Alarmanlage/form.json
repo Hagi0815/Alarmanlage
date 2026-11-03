@@ -1,0 +1,221 @@
+{
+    "elements": [
+        {
+            "type": "ExpansionPanel",
+            "caption": "Melder",
+            "expanded": true,
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "Nacht/Abwesend: in welchem Modus der Melder überwacht wird. Verzögert: startet die Eingangsverzögerung (Türen). Einzeln ausreichend: löst ohne Mindestanzahl aus."
+                },
+                {
+                    "type": "List",
+                    "name": "Sensors",
+                    "caption": "Melder",
+                    "rowCount": 12,
+                    "add": true,
+                    "delete": true,
+                    "sort": { "column": "Name", "direction": "ascending" },
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0, 1, 2] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } },
+                        { "caption": "Nacht", "name": "Night", "width": "70px", "add": false, "edit": { "type": "CheckBox" } },
+                        { "caption": "Abwesend", "name": "Away", "width": "90px", "add": true, "edit": { "type": "CheckBox" } },
+                        { "caption": "Verzögert", "name": "Delayed", "width": "90px", "add": false, "edit": { "type": "CheckBox" } },
+                        { "caption": "Einzeln ausreichend", "name": "Single", "width": "150px", "add": false, "edit": { "type": "CheckBox" } },
+                        { "caption": "Invertiert", "name": "Invert", "width": "90px", "add": false, "edit": { "type": "CheckBox" } }
+                    ]
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "NumberSpinner", "name": "RequiredSensors", "caption": "Mindestanzahl Melder für Alarm", "minimum": 1, "maximum": 10 },
+                        { "type": "NumberSpinner", "name": "TriggerWindow", "caption": "innerhalb von", "suffix": "Sekunden", "minimum": 10, "maximum": 3600 }
+                    ]
+                },
+                { "type": "CheckBox", "name": "PrealarmPush", "caption": "Push bei Voralarm (Melder ausgelöst, Mindestanzahl noch nicht erreicht)" }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Verzögerungen",
+            "items": [
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "NumberSpinner", "name": "ExitDelay", "caption": "Ausgangsverzögerung", "suffix": "Sekunden", "minimum": 0, "maximum": 600 },
+                        { "type": "NumberSpinner", "name": "EntryDelay", "caption": "Eingangsverzögerung", "suffix": "Sekunden", "minimum": 0, "maximum": 600 }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Sabotage und Erreichbarkeit",
+            "items": [
+                { "type": "Label", "caption": "Sabotage meldet immer per Push, auch bei unscharfer Anlage." },
+                {
+                    "type": "List",
+                    "name": "SabotageSources",
+                    "caption": "Sabotage-Variablen",
+                    "rowCount": 8,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0, 1] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } }
+                    ]
+                },
+                { "type": "CheckBox", "name": "SabotageAlarmWhenArmed", "caption": "Bei scharfer Anlage sofort Alarm auslösen" },
+                { "type": "Label", "caption": "Erreichbarkeit (z. B. UNREACH, true = nicht erreichbar): Warnung beim Scharfschalten und bei Ausfall im scharfen Zustand." },
+                {
+                    "type": "List",
+                    "name": "UnreachSources",
+                    "caption": "Erreichbarkeits-Variablen",
+                    "rowCount": 6,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Automatik (Anwesenheit und Nacht)",
+            "items": [
+                { "type": "Label", "caption": "Die Automatik wird über die Variable \"Automatik\" der Instanz ein- und ausgeschaltet." },
+                {
+                    "type": "List",
+                    "name": "PresenceSources",
+                    "caption": "Anwesenheit (true = anwesend, z. B. UniFi Presence)",
+                    "rowCount": 4,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0, 1] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } }
+                    ]
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "CheckBox", "name": "AutoAway", "caption": "Bei Abwesenheit aller automatisch \"Abwesend\" nach" },
+                        { "type": "NumberSpinner", "name": "AwayDelay", "caption": "", "suffix": "Minuten", "minimum": 1, "maximum": 120 }
+                    ]
+                },
+                { "type": "CheckBox", "name": "AutoDisarmOnReturn", "caption": "Bei Rückkehr automatisch unscharf (nur Modus Abwesend)" },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "CheckBox", "name": "NightAuto", "caption": "Nachtmodus automatisch von" },
+                        { "type": "SelectTime", "name": "NightStart", "caption": "" },
+                        { "type": "Label", "caption": "bis" },
+                        { "type": "SelectTime", "name": "NightEnd", "caption": "" }
+                    ]
+                },
+                {
+                    "type": "List",
+                    "name": "NightBlockers",
+                    "caption": "Nachtsperren (true = nicht scharf schalten, z. B. Partymodus, PC an)",
+                    "rowCount": 4,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0, 1] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } }
+                    ]
+                },
+                { "type": "NumberSpinner", "name": "BlockerDelay", "caption": "Entprellung Nachtsperren", "suffix": "Sekunden", "minimum": 0, "maximum": 3600 }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Alarmierung",
+            "items": [
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "SelectInstance", "name": "PushInstance", "caption": "Notification Control" },
+                        { "type": "CheckBox", "name": "StatusPush", "caption": "Push bei scharf/unscharf" }
+                    ]
+                },
+                {
+                    "type": "List",
+                    "name": "PushTargets",
+                    "caption": "Push-Empfänger",
+                    "rowCount": 3,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Ziel", "name": "TargetID", "width": "auto", "add": 0, "edit": { "type": "SelectObject" } }
+                    ]
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "SelectInstance", "name": "AlexaInstance", "caption": "Echo-Gerät für Ansage" },
+                        { "type": "NumberSpinner", "name": "AlexaVolume", "caption": "Lautstärke", "minimum": 0, "maximum": 100 }
+                    ]
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        { "type": "NumberSpinner", "name": "RepeatInterval", "caption": "Wiederholung alle", "suffix": "Sekunden", "minimum": 0, "maximum": 3600 },
+                        { "type": "NumberSpinner", "name": "RepeatCount", "caption": "maximal", "suffix": "mal", "minimum": 0, "maximum": 100 }
+                    ]
+                },
+                {
+                    "type": "List",
+                    "name": "Outputs",
+                    "caption": "Sirenen / Blitz (Schaltvariablen)",
+                    "rowCount": 4,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "260px", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0] } },
+                        { "caption": "Name", "name": "Name", "width": "auto", "add": "", "edit": { "type": "ValidationTextBox" } },
+                        { "caption": "Nacht", "name": "Night", "width": "70px", "add": false, "edit": { "type": "CheckBox" } },
+                        { "caption": "Abwesend", "name": "Away", "width": "90px", "add": true, "edit": { "type": "CheckBox" } }
+                    ]
+                },
+                { "type": "NumberSpinner", "name": "OutputDuration", "caption": "Sirenen-/Blitzdauer", "suffix": "Sekunden", "minimum": 10, "maximum": 900 },
+                {
+                    "type": "List",
+                    "name": "Lights",
+                    "caption": "Licht bei Alarm einschalten",
+                    "rowCount": 4,
+                    "add": true,
+                    "delete": true,
+                    "columns": [
+                        { "caption": "Variable", "name": "VariableID", "width": "auto", "add": 0, "edit": { "type": "SelectVariable", "validVariableTypes": [0] } }
+                    ]
+                },
+                { "type": "SelectScript", "name": "AlarmScript", "caption": "Zusätzliches Skript bei Alarm (ALARM_TYPE, ALARM_TEXT, MODE)" }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "RowLayout",
+            "items": [
+                { "type": "Button", "caption": "Nacht", "onClick": "ALM_SetMode($id, 1);" },
+                { "type": "Button", "caption": "Abwesend", "onClick": "ALM_SetMode($id, 2);" },
+                { "type": "Button", "caption": "Unscharf", "onClick": "ALM_SetMode($id, 0);" },
+                { "type": "Button", "caption": "Alarm quittieren", "onClick": "ALM_Acknowledge($id);" }
+            ]
+        },
+        {
+            "type": "Button",
+            "caption": "Offene Melder (Abwesend) anzeigen",
+            "onClick": "$o = ALM_GetOpenSensors($id, 2); echo count($o) ? implode(\"\\n\", $o) : 'Alle Melder in Ruhe';"
+        }
+    ],
+    "status": [
+        { "code": 102, "icon": "active", "caption": "Alarmanlage bereit" },
+        { "code": 201, "icon": "error", "caption": "In einem Modus gibt es weniger Melder als die Mindestanzahl und keinen Melder \"einzeln ausreichend\" – dort kann kein Alarm ausgelöst werden" }
+    ]
+}
