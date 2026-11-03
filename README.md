@@ -60,6 +60,34 @@ Tipp: Eingangstüren als *Verzögert* **und** *Einzeln ausreichend* markieren. D
 
 **Quittieren** (Variable `Alarm` auf false oder `ALM_Acknowledge`) stoppt Sirenen und Wiederholungen. Die Anlage bleibt im aktuellen Modus scharf. **Unscharf** beendet alles.
 
+### Texte für Push und Ansage
+
+Unter **Texte für Push und Ansage** lassen sich alle Nachrichten frei formulieren. Ein leeres Feld schaltet die jeweilige Nachricht ab. Die Buttons **Ansage testen** und **Push testen** senden den Alarmtext mit Beispielwerten.
+
+| Feld | Standard |
+| --- | --- |
+| Alarm – Push | `{TYP} im Modus {MODUS}: {MELDER} ({ZEIT} Uhr) {WIEDERHOLUNG}` |
+| Alarm – Ansage | `Achtung, {TYP}! Ausgelöst durch {MELDER}.` |
+| Sabotage (unscharf) – Push | `Sabotage erkannt: {MELDER}` |
+| Sabotage (unscharf) – Ansage | leer (keine Ansage) |
+| Voralarm | `{MELDER} ({ANZAHL} von {MINDEST} Meldern)` |
+| Scharfschalten gestartet | `{MODUS} wird in {SEKUNDEN} Sekunden scharf ({QUELLE})` |
+| Scharf | `{MODUS} scharf` |
+| Unscharf | `Unscharf ({QUELLE})` |
+
+| Platzhalter | Inhalt |
+| --- | --- |
+| `{TYP}` | Einbruch, Sabotage oder Notalarm |
+| `{MELDER}` | Ausgelöste Melder, z. B. „Flur und Wohnzimmer“ |
+| `{MODUS}` | Unscharf, Nacht, Abwesend (bei Notalarm: Notalarm) |
+| `{ZEIT}`, `{DATUM}` | Zeitpunkt, z. B. 22:41 und 03.11.2026 |
+| `{ANZAHL}`, `{MINDEST}` | Zahl der ausgelösten Melder und Mindestanzahl |
+| `{SEKUNDEN}` | Ausgangsverzögerung |
+| `{QUELLE}` | Auslöser des Schaltvorgangs, z. B. manuell, Rückkehr, Nachtbeginn |
+| `{WIEDERHOLUNG}` | Bei Wiederholungen „(Wiederholung n)“, sonst leer |
+
+Beispiel-Ansage mit Standardtext: *„Achtung, Einbruch! Ausgelöst durch EG Flur und Keller Küche.“* Die Ansage wird bei jeder Wiederholung gleich gesprochen. Die Push-Nachricht bekommt bei Wiederholungen den Zähler angehängt. Warnungen beim Scharfschalten (offene oder nicht erreichbare Melder) werden immer an den Scharf-Text angehängt.
+
 ### Sabotage und Erreichbarkeit
 
 - Sabotage-Variablen (Bool oder Integer) melden **immer** per Push. Die Variable `Sabotage` zeigt, ob gerade eine Quelle aktiv ist.
@@ -94,6 +122,8 @@ ALM_SetMode(int $InstanzID, int $Modus);       // 0 Unscharf, 1 Nacht, 2 Abwesen
 ALM_Acknowledge(int $InstanzID);               // Alarm quittieren
 ALM_Panic(int $InstanzID, string $Text);       // Notalarm, unabhängig vom Modus
 ALM_GetOpenSensors(int $InstanzID, int $Modus); // aktive/offene Melder eines Modus
+ALM_TestSpeech(int $InstanzID);                // Alarm-Ansage mit Beispielwerten
+ALM_TestPush(int $InstanzID);                  // Alarm-Push mit Beispielwerten
 ```
 
 Beispiel Codeschloss-Skript, gültiger Code schaltet unscharf:

@@ -81,7 +81,7 @@ Sim::$push = [];
 Sim::set(EG_FLUR, true);
 check('Zustand Voralarm', $m->v('State') === 3);
 check('Kein Alarm', $m->v('Alarm') === false);
-check('Push Voralarm 1/2', (bool) preg_grep('/1\/2/', Sim::$push), implode(' | ', Sim::$push));
+check('Push Voralarm 1 von 2', in_array('Voralarm: EG Flur (1 von 2 Meldern)', Sim::$push, true), implode(' | ', Sim::$push));
 check('Keine Sirene', !in_array([SIRENE, true], Sim::$actions, true));
 check('PrealarmTimer 120 s', $m->timers['PrealarmTimer'] === 120000, (string) $m->timers['PrealarmTimer']);
 Sim::set(EG_FLUR, true);
@@ -103,6 +103,8 @@ check('Sirene an (Abwesend)', in_array([SIRENE, true], Sim::$actions, true));
 check('Blitz an', in_array([BLITZ, true], Sim::$actions, true));
 check('Licht an', in_array([LICHT, true], Sim::$actions, true));
 check('Alexa-Ansage', count(Sim::$tts) === 1);
+check('Ansage-Text (Standard)', (Sim::$tts[0] ?? '') === 'Achtung, Einbruch! Ausgelöst durch EG Wohnzimmer und Keller Küche.', Sim::$tts[0] ?? '');
+check('Push-Text (Standard)', in_array('ALARM: Einbruch im Modus Abwesend: EG Wohnzimmer und Keller Küche (14:03 Uhr)', Sim::$push, true), implode(' | ', Sim::$push));
 check('Ausgelöste Melder enthalten beide', str_contains($m->v('TriggeredSensors'), 'EG Wohnzimmer') && str_contains($m->v('TriggeredSensors'), 'Keller Küche'), $m->v('TriggeredSensors'));
 check('OutputTimer 180 s', $m->timers['OutputTimer'] === 180000);
 
@@ -110,6 +112,8 @@ echo "5) Wiederholung begrenzt\n";
 for ($i = 0; $i < 12; $i++) { $m->RequestAction('RepeatTimer', 0); }
 check('10 Wiederholungen + Erstmeldung', count(Sim::$tts) === 11, (string) count(Sim::$tts));
 check('RepeatTimer gestoppt', $m->timers['RepeatTimer'] === 0);
+check('Push-Wiederholung mit Zähler', (bool) preg_grep('/\(Wiederholung 10\)$/', Sim::$push), end(Sim::$push));
+check('Ansage-Wiederholung ohne Zähler', end(Sim::$tts) === Sim::$tts[0]);
 
 echo "6) Quittieren\n";
 Sim::$actions = [];
@@ -249,6 +253,28 @@ Sim::set(HAUSTUER, 2); Sim::set(EG_FLUR, true);
 check('Eingangsverzögerung', $m->v('State') === 4);
 $m->ApplyChanges();
 check('Nach ApplyChanges: Scharf', $m->v('State') === 2);
+
+echo "17) Eigene Texte\n";
+$m = make([
+    'TextAlarmSpeech' => 'Einbrecher im Haus! {MELDER} hat ausgelöst um {ZEIT} Uhr.',
+    'TextAlarmPush' => '',
+    'TextSabotageSpeech' => 'Sabotage an {MELDER}',
+    'TextArmedPush' => 'Haus gesichert ({MODUS})',
+]);
+$m->RequestAction('Mode', 2); $m->RequestAction('ExitTimer', 0);
+check('Eigener Scharf-Text', in_array('Alarmanlage: Haus gesichert (Abwesend)', Sim::$push, true), implode(' | ', Sim::$push));
+Sim::$push = [];
+Sim::set(EG_FLUR, true); Sim::set(EG_WOHN, true);
+check('Eigene Ansage mit Platzhaltern', (Sim::$tts[0] ?? '') === 'Einbrecher im Haus! EG Flur und EG Wohnzimmer hat ausgelöst um ' . date('H:i', T::$now) . ' Uhr.', Sim::$tts[0] ?? '');
+check('Leerer Push-Text -> kein Alarm-Push', !preg_grep('/^ALARM/', Sim::$push), implode(' | ', Sim::$push));
+$m->RequestAction('Mode', 0);
+Sim::$tts = [];
+Sim::set(SAB_KEYPAD, true);
+check('Sabotage-Ansage bei unscharf', Sim::$tts === ['Sabotage an Codeschloss'], implode(' | ', Sim::$tts));
+check('Test-Ansage liefert Text', str_starts_with($m->TestSpeech(), 'Einbrecher im Haus! '));
+Sim::$push = [];
+$m->Panic('Notschalter Bett');
+check('Notalarm-Ansage', end(Sim::$tts) === 'Einbrecher im Haus! Notschalter Bett hat ausgelöst um ' . date('H:i', T::$now) . ' Uhr.', end(Sim::$tts));
 
 echo "\n" . ($fail === 0 ? 'ALLE TESTS BESTANDEN' : "$fail TEST(S) FEHLGESCHLAGEN") . "\n";
 exit($fail === 0 ? 0 : 1);

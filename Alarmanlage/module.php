@@ -26,11 +26,23 @@ class Alarmanlage extends IPSModule
     public const STATE_ENTRY = 4;
     public const STATE_ALARM = 5;
 
+    /** Standardtexte; Platzhalter siehe README bzw. Konfigurationsformular */
+    public const TEXT_DEFAULTS = [
+        'TextAlarmPush'     => '{TYP} im Modus {MODUS}: {MELDER} ({ZEIT} Uhr) {WIEDERHOLUNG}',
+        'TextAlarmSpeech'   => 'Achtung, {TYP}! Ausgelöst durch {MELDER}.',
+        'TextSabotagePush'  => 'Sabotage erkannt: {MELDER}',
+        'TextSabotageSpeech' => '',
+        'TextPrealarmPush'  => '{MELDER} ({ANZAHL} von {MINDEST} Meldern)',
+        'TextArmingPush'    => '{MODUS} wird in {SEKUNDEN} Sekunden scharf ({QUELLE})',
+        'TextArmedPush'     => '{MODUS} scharf',
+        'TextDisarmedPush'  => 'Unscharf ({QUELLE})',
+    ];
+
     private const TIMERS = ['ExitTimer', 'EntryTimer', 'PrealarmTimer', 'RepeatTimer', 'OutputTimer', 'AwayTimer', 'NightTimer', 'BlockerTimer', 'CountdownTimer'];
 
     public function GetVersion(): string
     {
-        return '1.0.0-2026-11-03';
+        return '1.1.0-2026-11-03';
     }
 
     public function Create(): void
@@ -76,11 +88,17 @@ class Alarmanlage extends IPSModule
         $this->RegisterPropertyString('Lights', '[]');
         $this->RegisterPropertyInteger('AlarmScript', 0);
 
+        // Texte (leer = keine Nachricht)
+        foreach (self::TEXT_DEFAULTS as $property => $default) {
+            $this->RegisterPropertyString($property, $default);
+        }
+
         // Laufzeitdaten
         $this->RegisterAttributeString('TriggerLog', '{}');
         $this->RegisterAttributeString('ArmedBy', '');
         $this->RegisterAttributeInteger('RepeatsDone', 0);
         $this->RegisterAttributeString('AlarmText', '');
+        $this->RegisterAttributeString('AlarmVars', '{}');
         $this->RegisterAttributeInteger('DelayEnd', 0);
         $this->RegisterAttributeBoolean('NightManualOff', false);
         $this->RegisterAttributeInteger('AlarmMode', 0);
@@ -163,7 +181,7 @@ class Alarmanlage extends IPSModule
         }
         if ($row = $this->FindRow('UnreachSources', $SenderID)) {
             if ($this->RisingEdge('UnreachSources', $SenderID, false) && $this->IsArmedState()) {
-                $this->Notify('Alarmanlage', 'Melder nicht erreichbar: ' . $this->RowName($row), 'alarm', false);
+                $this->Push('Alarmanlage', 'Melder nicht erreichbar: ' . $this->RowName($row), 'alarm');
                 $this->Event('Nicht erreichbar: ' . $this->RowName($row));
             }
         }
@@ -254,13 +272,29 @@ class Alarmanlage extends IPSModule
         $mode = $this->GetValue('Mode');
         $this->SetValue('State', $mode === self::MODE_OFF ? self::STATE_OFF : self::STATE_ARMED);
         $this->Event('Alarm quittiert');
-        $this->Notify('Alarmanlage', 'Alarm quittiert', 'default', false);
+        $this->Push('Alarmanlage', 'Alarm quittiert');
     }
 
     /** Notalarm, unabhängig vom Modus (z. B. für Notschalter). */
     public function Panic(string $Text): void
     {
-        $this->TriggerAlarm('Notalarm', $Text !== '' ? $Text : 'Notschalter', true);
+        $this->TriggerAlarm('Notalarm', [$Text !== '' ? $Text : 'Notschalter'], true);
+    }
+
+    /** Ansage mit dem Alarmtext und Beispielwerten testen. */
+    public function TestSpeech(): string
+    {
+        $text = $this->RenderText('TextAlarmSpeech', $this->SampleVars());
+        $this->Speak($text);
+        return $text;
+    }
+
+    /** Push mit dem Alarmtext und Beispielwerten testen. */
+    public function TestPush(): string
+    {
+        $text = $this->RenderText('TextAlarmPush', $this->SampleVars());
+        $this->Push('ALARM (Test)', $text);
+        return $text;
     }
 
     /** Liefert die Melder, die im angegebenen Modus gerade aktiv/offen sind. */
@@ -323,7 +357,7 @@ class Alarmanlage extends IPSModule
             $this->SetValue('State', self::STATE_EXIT);
             $this->StartDelay('ExitTimer', $delay);
             if ($this->ReadPropertyBoolean('StatusPush')) {
-                $this->Notify('Alarmanlage', $this->ModeName($mode) . ': wird in ' . $delay . ' s scharf (' . $source . ')', 'default', false);
+                $this->Push('Alarmanlage', $this->RenderText('TextArmingPush', ['MODUS' => $this->ModeName($mode), 'SEKUNDEN' => $delay, 'QUELLE' => $source]));
             }
         } else {
             $this->OnExitTimer();
@@ -357,10 +391,12 @@ class Alarmanlage extends IPSModule
             $warnings[] = 'nicht erreichbar: ' . implode(', ', $unreach);
         }
 
+        $text = $this->RenderText('TextArmedPush', ['MODUS' => $this->ModeName($mode), 'QUELLE' => $this->ReadAttributeString('ArmedBy')]);
         if (count($warnings) > 0) {
-            $this->Notify('Alarmanlage', $this->ModeName($mode) . ' scharf – Achtung, ' . implode('; ', $warnings), 'alarm', false);
+            // Warnungen werden immer gesendet, auch wenn der Text leer ist
+            $this->Push('Alarmanlage', ($text !== '' ? $text . ' – ' : '') . 'Achtung, ' . implode('; ', $warnings), 'alarm');
         } elseif ($this->ReadPropertyBoolean('StatusPush')) {
-            $this->Notify('Alarmanlage', $this->ModeName($mode) . ' scharf', 'default', false);
+            $this->Push('Alarmanlage', $text);
         }
     }
 
@@ -379,7 +415,7 @@ class Alarmanlage extends IPSModule
         $this->WriteAttributeString('ArmedBy', '');
         $this->Event('Unscharf (' . $source . ')');
         if ($this->ReadPropertyBoolean('StatusPush') || $wasAlarm) {
-            $this->Notify('Alarmanlage', 'Unscharf (' . $source . ')', 'default', false);
+            $this->Push('Alarmanlage', $this->RenderText('TextDisarmedPush', ['MODUS' => 'Unscharf', 'QUELLE' => $source]));
         }
     }
 
@@ -425,7 +461,7 @@ class Alarmanlage extends IPSModule
             if ($this->LogContainsDelayed($log) && $this->ReadPropertyInteger('EntryDelay') > 0) {
                 $this->StartEntryDelay();
             } else {
-                $this->TriggerAlarm('Einbruch', $this->LogNames($log), false);
+                $this->TriggerAlarm('Einbruch', $this->LogNameList($log), false);
             }
             return;
         }
@@ -433,7 +469,7 @@ class Alarmanlage extends IPSModule
         $this->SetValue('State', self::STATE_PREALARM);
         $this->SchedulePrealarmReset($log, $now);
         if ($this->ReadPropertyBoolean('PrealarmPush')) {
-            $this->Notify('Voralarm', $name . ' (' . $count . '/' . $required . ' Melder)', 'default', false);
+            $this->Push('Voralarm', $this->RenderText('TextPrealarmPush', ['MELDER' => $name, 'ANZAHL' => $count, 'MINDEST' => $required]));
         }
     }
 
@@ -453,7 +489,7 @@ class Alarmanlage extends IPSModule
             return;
         }
         $log = json_decode($this->ReadAttributeString('TriggerLog'), true) ?: [];
-        $this->TriggerAlarm('Einbruch', $this->LogNames($log), false);
+        $this->TriggerAlarm('Einbruch', $this->LogNameList($log), false);
     }
 
     protected function OnPrealarmTimer(): void
@@ -490,13 +526,15 @@ class Alarmanlage extends IPSModule
     {
         $this->Event('Sabotage: ' . $name);
         if ($this->ReadPropertyBoolean('SabotageAlarmWhenArmed') && $this->IsArmedState()) {
-            $this->TriggerAlarm('Sabotage', $name, false);
+            $this->TriggerAlarm('Sabotage', [$name], false);
             return;
         }
         if ($this->GetValue('State') === self::STATE_ALARM) {
             $this->AppendTriggered('Sabotage ' . $name);
         }
-        $this->Notify('SABOTAGE', 'Sabotage erkannt: ' . $name, 'alarm', false);
+        $vars = ['TYP' => 'Sabotage', 'MELDER' => $name];
+        $this->Push('SABOTAGE', $this->RenderText('TextSabotagePush', $vars), 'alarm');
+        $this->Speak($this->RenderText('TextSabotageSpeech', $vars));
     }
 
     protected function UpdateSabotageVariable(): void
@@ -518,8 +556,9 @@ class Alarmanlage extends IPSModule
     // Alarmkette
     // ---------------------------------------------------------------------
 
-    protected function TriggerAlarm(string $type, string $text, bool $panic): void
+    protected function TriggerAlarm(string $type, array $names, bool $panic): void
     {
+        $text = $this->JoinNames($names);
         if ($this->GetValue('State') === self::STATE_ALARM) {
             $this->AppendTriggered($text);
             return;
@@ -534,7 +573,8 @@ class Alarmanlage extends IPSModule
         $this->SetValue('Alarm', true);
         $message = strtoupper($type) . ': ' . $text;
         $this->WriteAttributeString('AlarmText', $message);
-        $this->SetValue('TriggeredSensors', $text);
+        $log = json_decode($this->ReadAttributeString('TriggerLog'), true) ?: [];
+        $this->SetValue('TriggeredSensors', $type === 'Einbruch' && count($log) > 0 ? $this->LogNames($log) : $text);
         $this->Event($message);
         IPS_LogMessage('Alarmanlage', $message);
 
@@ -554,7 +594,16 @@ class Alarmanlage extends IPSModule
             IPS_RunScriptEx($script, ['ALARM_TYPE' => $type, 'ALARM_TEXT' => $text, 'MODE' => $mode]);
         }
 
-        $this->Notify('ALARM', $message, 'alarm', true);
+        $vars = [
+            'TYP'    => $type,
+            'MELDER' => $text,
+            'MODUS'  => $panic ? 'Notalarm' : $this->ModeName($mode),
+            'ZEIT'   => date('H:i', $this->Now()),
+            'DATUM'  => date('d.m.Y', $this->Now()),
+            'ANZAHL' => count($names),
+        ];
+        $this->WriteAttributeString('AlarmVars', json_encode($vars));
+        $this->SendAlarmMessages($vars);
         $this->WriteAttributeInteger('RepeatsDone', 0);
         $interval = max(0, $this->ReadPropertyInteger('RepeatInterval'));
         if ($interval > 0 && $this->ReadPropertyInteger('RepeatCount') > 0) {
@@ -570,7 +619,15 @@ class Alarmanlage extends IPSModule
             return;
         }
         $this->WriteAttributeInteger('RepeatsDone', $done + 1);
-        $this->Notify('ALARM', $this->ReadAttributeString('AlarmText') . ' (Wiederholung ' . ($done + 1) . ')', 'alarm', true);
+        $vars = json_decode($this->ReadAttributeString('AlarmVars'), true) ?: [];
+        $vars['WIEDERHOLUNG'] = '(Wiederholung ' . ($done + 1) . ')';
+        $this->SendAlarmMessages($vars);
+    }
+
+    protected function SendAlarmMessages(array $vars): void
+    {
+        $this->Push('ALARM', $this->RenderText('TextAlarmPush', $vars), 'alarm');
+        $this->Speak($this->RenderText('TextAlarmSpeech', $vars));
     }
 
     protected function StopAlarmOutputs(): void
@@ -752,8 +809,13 @@ class Alarmanlage extends IPSModule
         return time();
     }
 
-    protected function Notify(string $title, string $text, string $sound, bool $speak): void
+    /** Push an alle Empfänger. Leerer Text = keine Nachricht. */
+    protected function Push(string $title, string $text, string $sound = 'default'): void
     {
+        $text = trim($text);
+        if ($text === '') {
+            return;
+        }
         $instance = $this->ReadPropertyInteger('PushInstance');
         if ($instance > 0 && IPS_InstanceExists($instance) && function_exists('NC_PushNotification')) {
             foreach ($this->GetList('PushTargets') as $row) {
@@ -763,11 +825,50 @@ class Alarmanlage extends IPSModule
                 }
             }
         }
+        $this->SendDebug('Push', $title . ': ' . $text, 0);
+    }
+
+    /** Ansage über das Echo-Gerät. Leerer Text = keine Ansage. */
+    protected function Speak(string $text): void
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return;
+        }
         $alexa = $this->ReadPropertyInteger('AlexaInstance');
-        if ($speak && $alexa > 0 && IPS_InstanceExists($alexa) && function_exists('ECHOREMOTE_TextToSpeechVolume')) {
+        if ($alexa > 0 && IPS_InstanceExists($alexa) && function_exists('ECHOREMOTE_TextToSpeechVolume')) {
             @ECHOREMOTE_TextToSpeechVolume($alexa, $text, $this->ReadPropertyInteger('AlexaVolume'));
         }
-        $this->SendDebug('Notify', $title . ': ' . $text, 0);
+        $this->SendDebug('Ansage', $text, 0);
+    }
+
+    /** Ersetzt {PLATZHALTER} im Text der Eigenschaft und räumt doppelte Leerzeichen auf. */
+    protected function RenderText(string $property, array $vars): string
+    {
+        $vars += [
+            'ZEIT'  => date('H:i', $this->Now()),
+            'DATUM' => date('d.m.Y', $this->Now()),
+            'MODUS' => $this->ModeName($this->GetValue('Mode')),
+            'WIEDERHOLUNG' => '',
+        ];
+        $replace = [];
+        foreach ($vars as $key => $value) {
+            $replace['{' . $key . '}'] = (string) $value;
+        }
+        $text = strtr($this->ReadPropertyString($property), $replace);
+        $text = preg_replace('/\(\s*\)/', '', $text);
+        return trim(preg_replace('/\s{2,}/', ' ', $text));
+    }
+
+    /** "A", "A und B", "A, B und C" – liest sich auch in der Ansage natürlich. */
+    protected function JoinNames(array $names): string
+    {
+        $names = array_values(array_unique(array_filter($names, 'strlen')));
+        if (count($names) <= 1) {
+            return $names[0] ?? '';
+        }
+        $last = array_pop($names);
+        return implode(', ', $names) . ' und ' . $last;
     }
 
     protected function Event(string $text): void
@@ -943,6 +1044,17 @@ class Alarmanlage extends IPSModule
         return false;
     }
 
+    protected function LogNameList(array $log): array
+    {
+        asort($log);
+        $names = [];
+        foreach (array_keys($log) as $id) {
+            $row = $this->FindRow('Sensors', (int) $id);
+            $names[] = $row ? $this->RowName($row) : (string) $id;
+        }
+        return $names;
+    }
+
     protected function LogNames(array $log): string
     {
         asort($log);
@@ -991,6 +1103,17 @@ class Alarmanlage extends IPSModule
         }
         $id = (int) ($row['VariableID'] ?? 0);
         return ($id > 0 && IPS_ObjectExists($id)) ? IPS_GetName($id) : '#' . $id;
+    }
+
+    protected function SampleVars(): array
+    {
+        $names = array_slice(array_map([$this, 'RowName'], $this->SensorsForMode(self::MODE_AWAY)), 0, 2);
+        return [
+            'TYP'    => 'Einbruch',
+            'MELDER' => $this->JoinNames(count($names) > 0 ? $names : ['Flur', 'Wohnzimmer']),
+            'MODUS'  => 'Abwesend',
+            'ANZAHL' => max(2, count($names)),
+        ];
     }
 
     protected function ModeName(int $mode): string
