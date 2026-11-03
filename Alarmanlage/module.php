@@ -5,7 +5,8 @@ declare(strict_types=1);
 /**
  * Alarmanlage für IP-Symcon
  *
- * Modi:     0 = Unscharf, 1 = Nacht (Hüllschutz/Teilbereich), 2 = Abwesend (alles)
+ * Modi:     0 = Unscharf, 1 = Nacht (Teilbereich), 2 = Abwesend (alles),
+ *           3 = Außenhaut (nur Türen/Fenster, innen frei bewegen)
  * Zustände: 0 = Unscharf, 1 = Ausgangsverzögerung, 2 = Scharf, 3 = Voralarm,
  *           4 = Eingangsverzögerung, 5 = ALARM
  *
@@ -18,6 +19,9 @@ class Alarmanlage extends IPSModule
     public const MODE_OFF = 0;
     public const MODE_NIGHT = 1;
     public const MODE_AWAY = 2;
+    public const MODE_PERIMETER = 3;
+
+    private const MODE_COLUMNS = [1 => 'Night', 2 => 'Away', 3 => 'Perimeter'];
 
     public const STATE_OFF = 0;
     public const STATE_EXIT = 1;
@@ -42,7 +46,7 @@ class Alarmanlage extends IPSModule
 
     public function GetVersion(): string
     {
-        return '1.1.0-2026-11-03';
+        return '1.2.0-2026-11-03';
     }
 
     public function Create(): void
@@ -54,6 +58,7 @@ class Alarmanlage extends IPSModule
         $this->RegisterPropertyInteger('RequiredSensors', 2);
         $this->RegisterPropertyInteger('TriggerWindow', 120);
         $this->RegisterPropertyBoolean('PrealarmPush', true);
+        $this->RegisterPropertyBoolean('BlockArmingIfOpen', false);
 
         // Verzögerungen
         $this->RegisterPropertyInteger('ExitDelay', 60);
@@ -152,6 +157,7 @@ class Alarmanlage extends IPSModule
         }
 
         $this->InitEdgeState();
+        $this->CreateProfiles();
         $this->ValidateConfiguration();
         $this->RecoverState();
         $this->UpdateSabotageVariable();
@@ -169,18 +175,18 @@ class Alarmanlage extends IPSModule
         }
 
         if ($row = $this->FindRow('Sensors', $SenderID)) {
-            if ($this->RisingEdge('Sensors', $SenderID, (bool) ($row['Invert'] ?? false))) {
+            if ($this->RisingEdge('Sensors', $SenderID, $row)) {
                 $this->HandleSensor($SenderID, $row);
             }
         }
         if ($row = $this->FindRow('SabotageSources', $SenderID)) {
             $this->UpdateSabotageVariable();
-            if ($this->RisingEdge('SabotageSources', $SenderID, false)) {
+            if ($this->RisingEdge('SabotageSources', $SenderID, null)) {
                 $this->HandleSabotage($this->RowName($row));
             }
         }
         if ($row = $this->FindRow('UnreachSources', $SenderID)) {
-            if ($this->RisingEdge('UnreachSources', $SenderID, false) && $this->IsArmedState()) {
+            if ($this->RisingEdge('UnreachSources', $SenderID, null) && $this->IsArmedState()) {
                 $this->Push('Alarmanlage', 'Melder nicht erreichbar: ' . $this->RowName($row), 'alarm');
                 $this->Event('Nicht erreichbar: ' . $this->RowName($row));
             }
@@ -303,7 +309,7 @@ class Alarmanlage extends IPSModule
         $open = [];
         foreach ($this->SensorsForMode($Mode) as $row) {
             $id = (int) $row['VariableID'];
-            if (IPS_VariableExists($id) && $this->IsActive(GetValue($id), (bool) ($row['Invert'] ?? false))) {
+            if (IPS_VariableExists($id) && $this->SensorActive($row, GetValue($id))) {
                 $open[] = $this->RowName($row);
             }
         }
@@ -316,7 +322,7 @@ class Alarmanlage extends IPSModule
 
     protected function SetModeInternal(int $mode, string $source): void
     {
-        if (!in_array($mode, [self::MODE_OFF, self::MODE_NIGHT, self::MODE_AWAY], true)) {
+        if ($mode !== self::MODE_OFF && !isset(self::MODE_COLUMNS[$mode])) {
             throw new Exception('Ungültiger Modus: ' . $mode);
         }
         $current = $this->GetValue('Mode');
@@ -336,8 +342,18 @@ class Alarmanlage extends IPSModule
             return;
         }
 
-        // Wechsel zwischen Nacht und Abwesend: laufenden Alarm beibehalten
+        // Wechsel zwischen den Modi: laufenden Alarm beibehalten
         $alarmActive = $this->GetValue('State') === self::STATE_ALARM;
+
+        if (!$alarmActive && $this->ReadPropertyBoolean('BlockArmingIfOpen')) {
+            $open = $this->GetOpenSensors($mode);
+            if (count($open) > 0) {
+                $text = $this->ModeName($mode) . ' nicht scharf geschaltet (' . $source . ') – offen: ' . $this->JoinNames($open);
+                $this->Event($text);
+                $this->Push('Alarmanlage', $text, 'alarm');
+                return;
+            }
+        }
 
         $this->SetValue('Mode', $mode);
         $this->WriteAttributeString('ArmedBy', $source);
@@ -648,9 +664,8 @@ class Alarmanlage extends IPSModule
                 continue;
             }
             if ($on) {
-                $use = $alarmMode === -1
-                    || ($alarmMode === self::MODE_NIGHT && ($row['Night'] ?? false))
-                    || ($alarmMode === self::MODE_AWAY && ($row['Away'] ?? false));
+                $column = self::MODE_COLUMNS[$alarmMode] ?? '';
+                $use = $alarmMode === -1 || ($column !== '' && ($row[$column] ?? false));
                 if (!$use) {
                     continue;
                 }
@@ -927,7 +942,7 @@ class Alarmanlage extends IPSModule
     protected function ValidateConfiguration(): void
     {
         $required = max(1, $this->ReadPropertyInteger('RequiredSensors'));
-        foreach ([self::MODE_NIGHT, self::MODE_AWAY] as $mode) {
+        foreach (array_keys(self::MODE_COLUMNS) as $mode) {
             $rows = $this->SensorsForMode($mode);
             if (count($rows) === 0) {
                 continue;
@@ -950,10 +965,11 @@ class Alarmanlage extends IPSModule
      * Flankenerkennung über den zuletzt bekannten Zustand (unabhängig vom
      * Aufbau der VM_UPDATE-Daten): nur der Wechsel inaktiv -> aktiv zählt.
      */
-    protected function RisingEdge(string $list, int $variableID, bool $invert): bool
+    protected function RisingEdge(string $list, int $variableID, ?array $sensorRow): bool
     {
         $last = json_decode($this->ReadAttributeString('LastActive'), true) ?: [];
-        $active = $this->IsActive(GetValue($variableID), $invert);
+        $value = GetValue($variableID);
+        $active = $sensorRow !== null ? $this->SensorActive($sensorRow, $value) : $this->IsActive($value);
         $key = $list . ':' . $variableID;
         $was = (bool) ($last[$key] ?? false);
         $last[$key] = $active;
@@ -968,12 +984,27 @@ class Alarmanlage extends IPSModule
             foreach ($this->GetList($list) as $row) {
                 $id = (int) ($row['VariableID'] ?? 0);
                 if ($id > 0 && IPS_VariableExists($id)) {
-                    $invert = $list === 'Sensors' && (bool) ($row['Invert'] ?? false);
-                    $last[$list . ':' . $id] = $this->IsActive(GetValue($id), $invert);
+                    $value = GetValue($id);
+                    $last[$list . ':' . $id] = $list === 'Sensors' ? $this->SensorActive($row, $value) : $this->IsActive($value);
                 }
             }
         }
         $this->WriteAttributeString('LastActive', json_encode($last));
+    }
+
+    /**
+     * Melder aktiv? Zahlen (Fenstergriff 0/1/2, Türkontakt 0/1) gelten ab dem
+     * Schwellwert der Melderzeile als aktiv, Boolean bei true. "Invertiert"
+     * kehrt das Ergebnis um.
+     */
+    protected function SensorActive(array $row, $value): bool
+    {
+        $invert = (bool) ($row['Invert'] ?? false);
+        if (is_int($value) || is_float($value)) {
+            $active = $value >= max(1, (int) ($row['Threshold'] ?? 1));
+            return $invert ? !$active : $active;
+        }
+        return $this->IsActive($value, $invert);
     }
 
     protected function IsActive($value, bool $invert = false): bool
@@ -998,13 +1029,12 @@ class Alarmanlage extends IPSModule
 
     protected function SensorInMode(array $row, int $mode): bool
     {
-        if ($mode === self::MODE_NIGHT) {
-            return (bool) ($row['Night'] ?? false);
+        $column = self::MODE_COLUMNS[$mode] ?? '';
+        if ($column === '') {
+            return false;
         }
-        if ($mode === self::MODE_AWAY) {
-            return (bool) ($row['Away'] ?? true);
-        }
-        return false;
+        // Ältere Konfigurationen ohne Spalte: Abwesend = an, sonst aus
+        return (bool) ($row[$column] ?? ($mode === self::MODE_AWAY));
     }
 
     protected function SensorsForMode(int $mode): array
@@ -1118,7 +1148,7 @@ class Alarmanlage extends IPSModule
 
     protected function ModeName(int $mode): string
     {
-        return [self::MODE_OFF => 'Unscharf', self::MODE_NIGHT => 'Nacht', self::MODE_AWAY => 'Abwesend'][$mode] ?? (string) $mode;
+        return [self::MODE_OFF => 'Unscharf', self::MODE_NIGHT => 'Nacht', self::MODE_AWAY => 'Abwesend', self::MODE_PERIMETER => 'Außenhaut'][$mode] ?? (string) $mode;
     }
 
     protected function ReadTimeProperty(string $property): int
@@ -1144,6 +1174,8 @@ class Alarmanlage extends IPSModule
             IPS_SetVariableProfileAssociation('ALM.Mode', 1, 'Nacht', '', 0x3F51B5);
             IPS_SetVariableProfileAssociation('ALM.Mode', 2, 'Abwesend', '', 0xF44336);
         }
+        // ab Version 1.2: Modus Außenhaut auch in bestehenden Profilen ergänzen
+        IPS_SetVariableProfileAssociation('ALM.Mode', 3, 'Außenhaut', '', 0xFF9800);
         if (!IPS_VariableProfileExists('ALM.State')) {
             IPS_CreateVariableProfile('ALM.State', 1);
             IPS_SetVariableProfileIcon('ALM.State', 'Alert');

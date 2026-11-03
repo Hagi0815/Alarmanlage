@@ -41,6 +41,7 @@ function RequestAction(int $id, $v): bool { Sim::$actions[] = [$id, $v]; Sim::$v
 function NC_PushNotification(int $i, int $t, string $title, string $text, string $sound): bool { Sim::$push[] = "$title: $text"; return true; }
 function ECHOREMOTE_TextToSpeechVolume(int $i, string $t, int $v): bool { Sim::$tts[] = $t; return true; }
 function IPS_VariableProfileExists(string $p): bool { return true; }
+function IPS_SetVariableProfileAssociation(string $p, $v, string $n, string $i, int $c): bool { return true; }
 
 class IPSModule
 {

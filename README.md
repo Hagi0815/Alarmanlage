@@ -1,6 +1,6 @@
 # Alarmanlage
 
-IP-Symcon-Modul für eine Alarmanlage mit den Modi **Unscharf**, **Nacht** und **Abwesend**, Fehlalarmschutz über eine Mindestanzahl auslösender Melder, Ein- und Ausgangsverzögerung, Sabotageüberwachung sowie automatischem Scharfschalten über Anwesenheit und Nachtzeit.
+IP-Symcon-Modul für eine Alarmanlage mit den Modi **Unscharf**, **Nacht**, **Abwesend** und **Außenhaut**, Fehlalarmschutz über eine Mindestanzahl auslösender Melder, Ein- und Ausgangsverzögerung, Sabotageüberwachung sowie automatischem Scharfschalten über Anwesenheit und Nachtzeit.
 
 Kompatibel ab IP-Symcon 8.0, getestet für 9.0.
 
@@ -9,6 +9,17 @@ Kompatibel ab IP-Symcon 8.0, getestet für 9.0.
 Im Modul-Control (Kern-Instanzen → Modules) die URL `https://github.com/Hagi0815/Alarmanlage` hinzufügen und eine Instanz **Alarmanlage** anlegen.
 
 ## Funktionsweise
+
+### Modi
+
+| Wert | Modus | Typischer Einsatz |
+| --- | --- | --- |
+| 0 | Unscharf | |
+| 1 | Nacht | Teilbereich, z. B. Keller, während oben geschlafen wird |
+| 2 | Abwesend | Alle Melder, niemand zu Hause |
+| 3 | Außenhaut | Nur Türen und Fenster, innen kann man sich frei bewegen |
+
+Welche Melder und welche Sirenen/Blitze in einem Modus aktiv sind, legen die gleichnamigen Spalten fest.
 
 ### Zustände
 
@@ -41,11 +52,26 @@ Ist in einem Modus die Mindestanzahl größer als die Zahl der Melder in diesem 
 | --- | --- |
 | Nacht | Melder wird im Modus Nacht überwacht |
 | Abwesend | Melder wird im Modus Abwesend überwacht |
+| Außenhaut | Melder wird im Modus Außenhaut überwacht |
 | Verzögert | Ist ein solcher Melder unter den auslösenden, startet statt des Alarms die Eingangsverzögerung (Türen) |
 | Einzeln ausreichend | Löst ohne Mindestanzahl aus |
-| Invertiert | `false`/`0` gilt als aktiv |
+| ab Wert | Bei Integer/Float: ab diesem Wert ist der Melder aktiv (Standard 1) |
+| Invertiert | Ergebnis umkehren, z. B. wenn `false` = offen bedeutet |
 
-Als aktiv gilt: Boolean `true`, Integer/Float `> 0` (z. B. Türkontakt 1 = gekippt, 2 = offen).
+Als aktiv gilt: Boolean `true`, Integer/Float ab dem Wert in „ab Wert“.
+
+**Fenstergriffe** (z. B. HmIP-SRH, 0 = geschlossen, 1 = gekippt, 2 = geöffnet) werden direkt als Melder eingetragen:
+
+- `ab Wert = 1`: Schon das Kippen löst aus.
+- `ab Wert = 2`: Nur das vollständige Öffnen löst aus. Ein gekipptes Fenster gilt dann auch beim Scharfschalten nicht als offen.
+
+Gezählt wird der Wechsel von „unter der Schwelle“ auf „ab der Schwelle“. Ein Fenster, das von gekippt auf offen geht, löst mit `ab Wert = 1` also nicht erneut aus.
+
+### Außenhautüberwachung
+
+Für den Modus Außenhaut alle Tür- und Fensterkontakte sowie Fenstergriffe mit Haken in der Spalte **Außenhaut** versehen. Weil ein Öffnungskontakt kaum Fehlalarme erzeugt, sollten diese Melder **einzeln ausreichend** sein. Sonst greift auch hier die Mindestanzahl. Ohne einzeln ausreichende Melder und mit zu wenigen Meldern in diesem Modus zeigt die Instanz Status 201.
+
+Option **„Nicht scharf schalten, solange ein Melder des Modus offen ist“**: Ist beim Scharfschalten ein Fenster oder eine Tür offen, bleibt die Anlage unscharf und schickt eine Push-Nachricht mit den offenen Meldern. Ohne die Option wird scharf geschaltet und nur gewarnt. Die Option gilt für alle Modi, also auch für das automatische Scharfschalten bei Abwesenheit.
 
 Tipp: Eingangstüren als *Verzögert* **und** *Einzeln ausreichend* markieren. Dann startet das Öffnen allein die Eingangsverzögerung.
 
@@ -118,7 +144,7 @@ Die Variable **Automatik** schaltet die Automatik ein und aus.
 ## PHP-Befehle
 
 ```php
-ALM_SetMode(int $InstanzID, int $Modus);       // 0 Unscharf, 1 Nacht, 2 Abwesend
+ALM_SetMode(int $InstanzID, int $Modus);       // 0 Unscharf, 1 Nacht, 2 Abwesend, 3 Außenhaut
 ALM_Acknowledge(int $InstanzID);               // Alarm quittieren
 ALM_Panic(int $InstanzID, string $Text);       // Notalarm, unabhängig vom Modus
 ALM_GetOpenSensors(int $InstanzID, int $Modus); // aktive/offene Melder eines Modus
@@ -142,4 +168,4 @@ if ($_IPS['VALUE']) {
 
 ## Tests
 
-`php tests/run.php` führt die Logiktests mit einem IPSModule-Stub aus (Schwelle, Zeitfenster, Verzögerungen, Sabotage, Notalarm, Nacht- und Abwesenheitsautomatik, Neustart).
+`php tests/run.php` führt die Logiktests mit einem IPSModule-Stub aus (Schwelle, Zeitfenster, Verzögerungen, Sabotage, Notalarm, Fenstergriffe, Außenhaut, Texte, Nacht- und Abwesenheitsautomatik, Neustart).

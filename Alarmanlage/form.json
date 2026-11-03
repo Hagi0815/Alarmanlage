@@ -7,7 +7,7 @@
             "items": [
                 {
                     "type": "Label",
-                    "caption": "Nacht/Abwesend: in welchem Modus der Melder überwacht wird. Verzögert: startet die Eingangsverzögerung (Türen). Einzeln ausreichend: löst ohne Mindestanzahl aus."
+                    "caption": "Nacht/Abwesend/Außenhaut: in welchem Modus der Melder überwacht wird. Verzögert: startet die Eingangsverzögerung (Türen). Einzeln ausreichend: löst ohne Mindestanzahl aus (empfohlen für Tür- und Fensterkontakte). ab Wert: bei Zahlen-Variablen der Wert, ab dem der Melder aktiv ist – Fenstergriff 1 = schon gekippt löst aus, 2 = nur geöffnet."
                 },
                 {
                     "type": "List",
@@ -63,6 +63,15 @@
                             }
                         },
                         {
+                            "caption": "Außenhaut",
+                            "name": "Perimeter",
+                            "width": "90px",
+                            "add": false,
+                            "edit": {
+                                "type": "CheckBox"
+                            }
+                        },
+                        {
                             "caption": "Verzögert",
                             "name": "Delayed",
                             "width": "90px",
@@ -78,6 +87,17 @@
                             "add": false,
                             "edit": {
                                 "type": "CheckBox"
+                            }
+                        },
+                        {
+                            "caption": "ab Wert",
+                            "name": "Threshold",
+                            "width": "80px",
+                            "add": 1,
+                            "edit": {
+                                "type": "NumberSpinner",
+                                "minimum": 1,
+                                "maximum": 10
                             }
                         },
                         {
@@ -115,6 +135,11 @@
                     "type": "CheckBox",
                     "name": "PrealarmPush",
                     "caption": "Push bei Voralarm (Melder ausgelöst, Mindestanzahl noch nicht erreicht)"
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "BlockArmingIfOpen",
+                    "caption": "Nicht scharf schalten, solange ein Melder des Modus offen/aktiv ist (sonst nur Warnung)"
                 }
             ]
         },
@@ -478,6 +503,15 @@
                             "edit": {
                                 "type": "CheckBox"
                             }
+                        },
+                        {
+                            "caption": "Außenhaut",
+                            "name": "Perimeter",
+                            "width": "90px",
+                            "add": false,
+                            "edit": {
+                                "type": "CheckBox"
+                            }
                         }
                     ]
                 },
@@ -623,6 +657,11 @@
                 },
                 {
                     "type": "Button",
+                    "caption": "Außenhaut",
+                    "onClick": "ALM_SetMode($id, 3);"
+                },
+                {
+                    "type": "Button",
                     "caption": "Unscharf",
                     "onClick": "ALM_SetMode($id, 0);"
                 },
@@ -634,9 +673,19 @@
             ]
         },
         {
-            "type": "Button",
-            "caption": "Offene Melder (Abwesend) anzeigen",
-            "onClick": "$o = ALM_GetOpenSensors($id, 2); echo count($o) ? implode(\"\\n\", $o) : 'Alle Melder in Ruhe';"
+            "type": "RowLayout",
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Offene Melder Außenhaut",
+                    "onClick": "$o = ALM_GetOpenSensors($id, 3); echo count($o) ? implode(\"\\n\", $o) : 'Außenhaut geschlossen';"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Offene Melder Abwesend",
+                    "onClick": "$o = ALM_GetOpenSensors($id, 2); echo count($o) ? implode(\"\\n\", $o) : 'Alle Melder in Ruhe';"
+                }
+            ]
         }
     ],
     "status": [

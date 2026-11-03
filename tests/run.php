@@ -276,5 +276,63 @@ Sim::$push = [];
 $m->Panic('Notschalter Bett');
 check('Notalarm-Ansage', end(Sim::$tts) === 'Einbrecher im Haus! Notschalter Bett hat ausgelöst um ' . date('H:i', T::$now) . ' Uhr.', end(Sim::$tts));
 
+echo "18) Fenstergriffe (Integer) und Außenhaut\n";
+const GRIFF_BAD = 38890, GRIFF_WOHN = 48343, SZ_TUER = 21368;
+$m = make([
+    'Sensors' => json_encode([
+        ['VariableID' => GRIFF_BAD, 'Name' => 'Badfenster', 'Perimeter' => true, 'Away' => true, 'Single' => true, 'Threshold' => 1],
+        ['VariableID' => GRIFF_WOHN, 'Name' => 'Wohnzimmerfenster', 'Perimeter' => true, 'Away' => true, 'Single' => true, 'Threshold' => 2],
+        ['VariableID' => HAUSTUER, 'Name' => 'Haustür', 'Perimeter' => true, 'Away' => true, 'Delayed' => true, 'Single' => true],
+        ['VariableID' => EG_FLUR, 'Name' => 'EG Flur', 'Perimeter' => false, 'Away' => true],
+        ['VariableID' => EG_WOHN, 'Name' => 'EG Wohnzimmer', 'Perimeter' => false, 'Away' => true],
+    ]),
+    'Outputs' => json_encode([
+        ['VariableID' => SIRENE, 'Name' => 'Sirene', 'Night' => false, 'Away' => true, 'Perimeter' => false],
+        ['VariableID' => BLITZ, 'Name' => 'Blitz', 'Night' => true, 'Away' => true, 'Perimeter' => true],
+    ]),
+]);
+Sim::$vars[GRIFF_BAD] = 0; Sim::$vars[GRIFF_WOHN] = 0; $m->ApplyChanges();
+check('Konfiguration gültig', $m->status === 102);
+$m->RequestAction('Mode', 3); $m->RequestAction('ExitTimer', 0);
+check('Modus Außenhaut scharf', $m->v('Mode') === 3 && $m->v('State') === 2);
+Sim::set(EG_FLUR, true); Sim::set(EG_WOHN, true);
+check('Innen-Bewegung ignoriert', $m->v('State') === 2);
+Sim::set(GRIFF_WOHN, 1);
+check('Wohnzimmerfenster gekippt (ab Wert 2) -> kein Alarm', $m->v('State') === 2);
+Sim::set(GRIFF_WOHN, 2);
+check('Wohnzimmerfenster geöffnet -> ALARM', $m->v('State') === 5);
+check('Blitz an, Sirene aus (Außenhaut)', in_array([BLITZ, true], Sim::$actions, true) && !in_array([SIRENE, true], Sim::$actions, true));
+$m->RequestAction('Mode', 0); Sim::set(GRIFF_WOHN, 0);
+$m->RequestAction('Mode', 3); $m->RequestAction('ExitTimer', 0);
+Sim::set(GRIFF_BAD, 1);
+check('Badfenster gekippt (ab Wert 1) -> ALARM', $m->v('State') === 5);
+$m->RequestAction('Mode', 0);
+Sim::set(GRIFF_BAD, 0); Sim::set(EG_FLUR, false); Sim::set(EG_WOHN, false);
+check('Offene Melder Außenhaut leer', $m->GetOpenSensors(3) === []);
+Sim::set(GRIFF_WOHN, 1);
+check('Gekippt unter Schwelle gilt nicht als offen', $m->GetOpenSensors(3) === []);
+Sim::set(GRIFF_BAD, 1);
+check('Badfenster gekippt gilt als offen', $m->GetOpenSensors(3) === ['Badfenster']);
+Sim::$push = [];
+$m->RequestAction('Mode', 3); $m->RequestAction('ExitTimer', 0);
+check('Ohne Sperre: scharf mit Warnung', $m->v('State') === 2 && (bool) preg_grep('/Achtung, aktiv\/offen: Badfenster/', Sim::$push), implode(' | ', Sim::$push));
+$m->RequestAction('Mode', 0);
+
+$m->props['BlockArmingIfOpen'] = true;
+Sim::$push = [];
+$m->RequestAction('Mode', 3);
+check('Mit Sperre: nicht scharf', $m->v('Mode') === 0 && $m->v('State') === 0);
+check('Push "nicht scharf geschaltet"', (bool) preg_grep('/Außenhaut nicht scharf geschaltet \(manuell\) – offen: Badfenster/', Sim::$push), implode(' | ', Sim::$push));
+Sim::set(GRIFF_BAD, 0);
+$m->RequestAction('Mode', 3);
+check('Fenster zu -> scharf möglich', $m->v('Mode') === 3 && $m->v('State') === 1);
+$m->RequestAction('Mode', 0);
+
+$m = make(['RequiredSensors' => 2, 'Sensors' => json_encode([
+    ['VariableID' => GRIFF_BAD, 'Perimeter' => true, 'Away' => true],
+    ['VariableID' => K_KUECHE, 'Away' => true],
+])]);
+check('Status 201: Außenhaut mit 1 Melder ohne "einzeln ausreichend"', $m->status === 201);
+
 echo "\n" . ($fail === 0 ? 'ALLE TESTS BESTANDEN' : "$fail TEST(S) FEHLGESCHLAGEN") . "\n";
 exit($fail === 0 ? 0 : 1);
